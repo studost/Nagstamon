@@ -6,3 +6,6 @@
 nagstamon.conf/
 .directory
 .metadata/
+*.old
+*.komodoproject
+

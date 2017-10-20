@@ -21,7 +21,7 @@
 # Initial implementation by Marcus Mönnig
 #
 # Changelog:
-# studo, adopted initial implementation for Monitos3
+# studo, adopted initial implementation for monitos 4
 #
 # TODOs:
 # a lot i'm sure
@@ -36,7 +36,7 @@ from Nagstamon.Helpers import webbrowser_open
 import logging
 logging.basicConfig( level=logging.INFO )
 # logging.basicConfig(filename='nagstamon.log',level=logging.INFO)
-log = logging.getLogger('Monitos3')
+log = logging.getLogger('Monitos4')
 
 import requests
 from bs4 import BeautifulSoup
@@ -56,12 +56,12 @@ def strfdelta(tdelta, fmt):
     return fmt.format(**d)
 
 
-class Monitos3Server( GenericServer ):
-    """A server running Monitos3 from Freicon.
+class Monitos4Server( GenericServer ):
+    """A server running Monitos4 from Freicon.
        http://www.monitos.de
-       Tested with monitos 3.7.17
+       Tested with monitos4 0.4.0
     """
-    TYPE = 'Monitos3'
+    TYPE = 'Monitos4'
     
     MENU_ACTIONS = ['Monitor', 'Recheck', 'Acknowledge', 'Submit check result', 'Downtime']
     STATES_MAPPING = {'hosts' : {0 : 'UP', 1 : 'DOWN', 2 : 'UNREACHABLE', 4 : 'PENDING' },
@@ -77,7 +77,7 @@ class Monitos3Server( GenericServer ):
         """
             Set URLs for CGI - they are static and there is no need to set them with every cycle
         """
-        log.info( 'Init monitos3 config at'+time.strftime( '%a %H:%M:%S' ) )
+        log.info( 'Init monitos4 config at'+time.strftime( '%a %H:%M:%S' ) )
         log.info( 'monitor_url is: '+self.monitor_url)
         # dummy default empty cgi urls - get filled later when server version is known
         self.cgiurl_services = None
@@ -114,7 +114,7 @@ class Monitos3Server( GenericServer ):
 
     def _get_status(self):
         """
-            Get status from monitos3 Server - only JSON
+            Get status from monitos4 Server - only JSON
         """
         # define CGI URLs for hosts and services
         if self.cgiurl_hosts == None:
@@ -335,7 +335,7 @@ class Monitos3Server( GenericServer ):
 
     def _set_recheck(self, host, service):
         """
-            Do a POST-Request to recheck the given host or service in monitos3
+            Do a POST-Request to recheck the given host or service in monitos4
 
             :param host: String - Host name
             :param service: String - Service name
@@ -356,7 +356,7 @@ class Monitos3Server( GenericServer ):
 
     def _set_acknowledge(self, host, service, author, comment, sticky, notify, persistent, all_services=[]):
         """
-            Do a POST-Request to set an acknowledgement for a host, service or host with all services in monitos3
+            Do a POST-Request to set an acknowledgement for a host, service or host with all services in monitos4
 
             :param host: String - Host name
             :param service: String - Service name
@@ -393,7 +393,7 @@ class Monitos3Server( GenericServer ):
 
     def _set_submit_check_result(self, host, service, state, comment, check_output, performance_data):
         """
-            Do a POST-Request to submit a check result to monitos3
+            Do a POST-Request to submit a check result to monitos4
 
             :param host: String - Host name
             :param service: String - Service name
@@ -450,7 +450,7 @@ class Monitos3Server( GenericServer ):
 
     def _set_downtime(self, host, service, author, comment, fixed, start_time, end_time, hours, minutes):
         """
-            Do a PUT-Request to create a downtime for a host or service in monitos3
+            Do a PUT-Request to create a downtime for a host or service in monitos4
 
             :param host: String - Host name
             :param service: String - Service name
@@ -494,7 +494,7 @@ class Monitos3Server( GenericServer ):
 
             :param host: String - Host name
         """
-        log.info("Flexible Downtimes are not supported in monitos3")
+        log.info("Flexible Downtimes are not supported in monitos4")
 
         start = datetime.datetime.now()
         end = datetime.datetime.now() + datetime.timedelta(hours=24)
@@ -503,7 +503,7 @@ class Monitos3Server( GenericServer ):
 
     def open_monitor(self, host, service=''):
         """
-            Open specific Host or Service in monitos3 browser
+            Open specific Host or Service in monitos4 browser
 
             :param host: String - Host name
             :param service: String - Service name
