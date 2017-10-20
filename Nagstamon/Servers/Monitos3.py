@@ -27,6 +27,7 @@ from Nagstamon.Objects import GenericHost
 from Nagstamon.Objects import GenericService
 from Nagstamon.Servers.Generic import GenericServer
 from Nagstamon.Config import conf
+from Nagstamon.Helpers import webbrowser_open
 
 import logging
 logging.basicConfig( level=logging.INFO )
@@ -71,32 +72,25 @@ class Monitos3Server(GenericServer):
 
     TYPE = 'Monitos3'
     MENU_ACTIONS = ['Monitor', 'Recheck', 'Acknowledge', 'Submit check result', 'Downtime']
-    # STATES_MAPPING = {'hosts' : {0 : 'UP', 1 : 'DOWN', 2 : 'UNREACHABLE'}, \
-    #                 'services' : {0 : 'OK', 1 : 'WARNING', 2 : 'CRITICAL', 3 : 'UNKNOWN'}}
-    # STATES_MAPPING_REV = {'hosts' : { 'UP': 0, 'DOWN': 1, 'UNREACHABLE': 2}, \
-    #                 'services' : {'OK': 0, 'WARNING': 1, 'CRITICAL': 2, 'UNKNOWN': 3}}
-    BROWSER_URLS = { 'monitor': '$MONITOR$/dashboard', \
-                    'hosts': '$MONITOR$/monitoring/list/hosts', \
-                    'services': '$MONITOR$/monitoring/list/services', \
-                    'history': '$MONITOR$/monitoring/list/eventhistory?timestamp>=-7 days'}
+    STATES_MAPPING = {'hosts' : {0 : 'UP', 1 : 'DOWN', 2 : 'UNREACHABLE', 4 : 'PENDING' }, \
+                      'services' : {0 : 'OK', 1 : 'WARNING', 2 : 'CRITICAL', 3 : 'UNKNOWN', 4 : 'PENDING' }}
+    STATES_MAPPING_REV = {'hosts' : { 'UP': 0, 'DOWN': 1, 'UNREACHABLE': 2, 'PENDING' : 4}, \
+                          'services' : {'OK': 0, 'WARNING': 1, 'CRITICAL': 2, 'UNKNOWN': 3, 'PENDING' : 4}}
+    BROWSER_URLS = { 'monitor': '$MONITOR$',
+                    'hosts': '$MONITOR$', 
+                    'services': '$MONITOR$',
+                    'history': '$MONITOR$/#/alert/ticker'}
 
 
     def init_config(self):
+        """
+            Set URLs for CGI - they are static and there is no need to set them with every cycle
+        """
         log.info( time.strftime('%a %H:%M:%S') )
         log.info(self.monitor_url)
-        # we abuse the monitor_url for the connection information
-        self.address = ('localhost', 6558)
-        m = re.match('.*?://([^:/]+?)(?::(\d+))?(?:/|$)', self.monitor_url)
-        if m:
-            host, port = m.groups()
-            if not port:
-                port = 6558
-            else:
-                port = int(port)
-            self.address = (host, port)
-        else:
-            log.error('unable to parse monitor_url %s', self.monitor_url)
-            self.enable = False
+        # dummy default empty cgi urls - get filled later when server version is known
+        self.cgiurl_services = None
+        self.cgiurl_hosts = None
 
     def init_HTTP(self):
         pass
@@ -358,9 +352,21 @@ class Monitos3Server(GenericServer):
         return 'n/a', 'n/a'
 
     def open_monitor(self, host, service=''):
-        log.info('open_monitor not implemented. host is %s', host)
-        # TODO figure out how to add more config options like socket and weburl
-        # line 77
+        log.info('open_monitor just implemented. host is %s', host)
+        """
+            Open specific Host or Service in monitos 3 browser window
+
+            :param host: String - Host name
+            :param service: String - Service name
+        """
+        if service == '':
+            url = '{0}/#/object/details/{1}'.format(
+                self.monitor_url, self.hosts[host].svid)
+        else:
+            url = '{0}/#/object/details/{1}'.format(
+                self.monitor_url, self.hosts[host].services[service].svid)
+
+        webbrowser_open(url)
 
     def open_monitor_webpage(self):
         '''
@@ -373,6 +379,3 @@ class Monitos3Server(GenericServer):
         log.info('monitos3_url is: %s', monitos3_url )
         webbrowser_open( monitos3_url )
 
-    # TODO
-    # config dialog fields
-    # config
