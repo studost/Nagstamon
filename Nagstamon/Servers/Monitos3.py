@@ -93,9 +93,12 @@ class Monitos3Server( GenericServer ):
 
         if len(self.session.cookies) == 0:
             form_inputs = dict()
-            if self.username.startswith('ldap:'):
+            if '@' in self.username:
                 form_inputs['module'] = 'ldap'
-                form_inputs['_username'] = self.username[5:]
+                form_inputs['_username'] = self.username
+            #if self.username.startswith('ldap:'):
+            #    form_inputs['module'] = 'ldap'
+            #    form_inputs['_username'] = self.username[5:]
             else:
                 form_inputs['module'] = 'sv'
                 form_inputs['_username'] = self.username
@@ -131,12 +134,26 @@ class Monitos3Server( GenericServer ):
         # hosts
         # if conf.filter_acknowledged_hosts_services:
         #    filters.append('Filter: acknowledged != 1')
+        # if service.passiveonly is True and conf.filter_hosts_services_disabled_checks is True:
+        # if service.scheduled_downtime is True and conf.filter_hosts_services_maintenance is True:
+        #          if conf.debug_mode:
+        #               self.Debug(server=self.get_name(),
+        #                          debug='Filter: DOWNTIME ' + str(host.name) + ';' + str(service.name))
+        #       if service.flapping is True and conf.filter_all_flapping_services is True:
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
+            if conf.filter_acknowledged_hosts_services:
+                form_data['acknowledged'] = 0
             form_data['downtime'] = 1
+            if conf.filter_hosts_services_maintenance:
+                if conf.debug_mode:
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' active filter: DOWNTIME')
+                form_data['downtime'] = 1
             form_data['inactiveHosts'] = 0
             form_data['disabledNotification'] = 1
+            if conf.filter_hosts_services_disabled_notifications:
+                form_data['disabledNotification'] = 0
             form_data['limit_start'] = 0
             # Get all hosts
             form_data['limit_length'] = 99999
@@ -233,9 +250,13 @@ class Monitos3Server( GenericServer ):
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
+            if conf.filter_acknowledged_hosts_services:
+                form_data['acknowledged'] = 0
             form_data['downtime'] = 1
             form_data['inactiveHosts'] = 0
             form_data['disabledNotification'] = 1
+            if conf.filter_hosts_services_disabled_notifications:
+                form_data['disabledNotification'] = 0
             form_data['softstate'] = 1
             form_data['limit_start'] = 0
             # Get all services
@@ -274,6 +295,7 @@ class Monitos3Server( GenericServer ):
                 # host and service
                 host_name = s['sv_host__nagios__host_name']
                 service_name = s['sv_service_status__svobjects__rendered_label']
+                display_name = s['sv_service_status__nagios__service_description']
 
                 # If a service does not exist, create its object
                 if service_name not in self.new_hosts[host_name].services:
@@ -282,7 +304,8 @@ class Monitos3Server( GenericServer ):
                     self.new_hosts[host_name].services[service_name].host = host_name
                     self.new_hosts[host_name].services[service_name].svid = s[
                         'sv_service_status__svobjects____SVID']
-                    self.new_hosts[host_name].services[service_name].name = service_name
+                    self.new_hosts[host_name].services[service_name].name = display_name
+                    # self.new_hosts[host_name].services[service_name].name = service_name
                     self.new_hosts[host_name].services[service_name].server = self.name
                     self.new_hosts[host_name].services[service_name].status = self.STATES_MAPPING['services'][int(
                         s['sv_service_status__nagios_status__current_state'])]
