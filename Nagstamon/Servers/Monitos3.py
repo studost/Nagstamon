@@ -33,10 +33,13 @@ from Nagstamon.Servers.Generic import GenericServer
 from Nagstamon.Config import conf
 from Nagstamon.Helpers import webbrowser_open
 
+monitos = 'monitos3'
 import logging
 logging.basicConfig( level=logging.INFO )
 # logging.basicConfig(filename='nagstamon.log',level=logging.INFO)
-log = logging.getLogger('Monitos3')
+log = logging.getLogger(monitos)
+# if conf.debug_mode:
+#   self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 active filter: DOWNTIME')
 
 import requests
 from bs4 import BeautifulSoup
@@ -94,8 +97,9 @@ class Monitos3Server( GenericServer ):
         if len(self.session.cookies) == 0:
             form_inputs = dict()
             if '@' in self.username:
+                user = self.username.split('@')
                 form_inputs['module'] = 'ldap'
-                form_inputs['_username'] = self.username
+                form_inputs['_username'] = user[0]
             #if self.username.startswith('ldap:'):
             #    form_inputs['module'] = 'ldap'
             #    form_inputs['_username'] = self.username[5:]
@@ -148,7 +152,7 @@ class Monitos3Server( GenericServer ):
             form_data['downtime'] = 1
             if conf.filter_hosts_services_maintenance:
                 if conf.debug_mode:
-                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' active filter: DOWNTIME')
+                    self.Debug(server=self.get_name(), debug=monitos + time.strftime('%a %H:%M:%S') + ' active filter: DOWNTIME')
                 form_data['downtime'] = 1
             form_data['inactiveHosts'] = 0
             form_data['disabledNotification'] = 1
