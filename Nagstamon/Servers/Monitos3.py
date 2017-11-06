@@ -136,24 +136,16 @@ class Monitos3Server( GenericServer ):
         self.new_hosts = dict()
 
         # hosts
-        try:
-            form_data = dict()
-            form_data['acknowledged'] = 1
 #            if conf.filter_acknowledged_hosts_services is True:
 #                if conf.debug_mode:
 #                    self.Debug(server=self.get_name(), debug=monitos + time.strftime('%a %H:%M:%S') + ' active filter_acknowledged_hosts_services')
 #                form_data['acknowledged'] = 0
+        try:
+            form_data = dict()
+            form_data['acknowledged'] = 1
             form_data['downtime'] = 1
-            if conf.filter_hosts_services_maintenance is True:
-                if conf.debug_mode:
-                    self.Debug(server=self.get_name(), debug=monitos + time.strftime('%a %H:%M:%S') + ' active filter_hosts_services_maintenance')
-                form_data['downtime'] = 1
             form_data['inactiveHosts'] = 0
             form_data['disabledNotification'] = 1
-            if conf.filter_hosts_services_disabled_notifications is True:
-                if conf.debug_mode:
-                    self.Debug(server=self.get_name(), debug=monitos + time.strftime('%a %H:%M:%S') + ' active filter_hosts_services_disabled_notifications')
-                form_data['disabledNotification'] = 0
             form_data['limit_start'] = 0
             # Get all hosts
             form_data['limit_length'] = 99999
@@ -197,10 +189,6 @@ class Monitos3Server( GenericServer ):
                 if int(h['sv_host__nagios_status__current_state']) == 4:
                     continue
 
-                # Skip if Host has notifications disabled
-                if int(h['sv_host__nagios_status__notifications_enabled']) == 0:
-                    continue
-
                 # host
                 host_name = h['sv_host__nagios__host_name']
 
@@ -222,10 +210,18 @@ class Monitos3Server( GenericServer ):
                         int(h['sv_host__nagios_status__notifications_enabled']))
                     self.new_hosts[host_name].flapping = int(
                         h['sv_host__nagios_status__is_flapping'])
+
+                    # 2017_11_06
                     if int(h['sv_host__nagios_status__problem_has_been_acknowledged']) != 0:
                         self.new_hosts[host_name].acknowledged = True
-                    self.new_hosts[host_name].scheduled_downtime = int(
-                        h['sv_host__nagios_status__scheduled_downtime_depth'])
+                    # 2017_11_06
+                    if int(h['sv_host__nagios_status__scheduled_downtime_depth']) != 0:
+                        self.new_hosts[host_name].scheduled_downtime = True
+                    
+                    # 2017_11_06 Skip if Host has notifications disabled
+                    if int(h['sv_host__nagios_status__notifications_enabled']) == 0:
+                        self.new_hosts[host_name].notifications_disabled = True
+
                     self.new_hosts[host_name].status_type = 'soft' if int(
                         h['sv_host__nagios_status__state_type']) == 0 else 'hard'
 
@@ -249,18 +245,9 @@ class Monitos3Server( GenericServer ):
         # services
         # 2017_11_05
         # https://sv37/rest/private/nagios/service_status/browser
-#       if service.acknowledged is True and conf.filter_acknowledged_hosts_services is True:
-#            if conf.debug_mode:
-#                self.Debug(server=self.get_name(),
-#                           debug='Filter: ACKNOWLEDGED ' + str(host.name) + ';' + str(service.name))
-#            service.visible = False
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
-#            if conf.filter_acknowledged_hosts_services is True:
-#                if conf.debug_mode:
-#                    self.Debug(server=self.get_name(), debug=monitos + time.strftime('%a %H:%M:%S') + ' active filter_acknowledged_hosts_services for service')
-#                form_data['acknowledged'] = 0
             form_data['downtime'] = 1
             form_data['inactiveHosts'] = 0
             form_data['disabledNotification'] = 1
@@ -294,16 +281,6 @@ class Monitos3Server( GenericServer ):
                         s['sv_host__nagios_status__current_state']) == 4:
                     continue
 
-                # Skip if Host or Service has notifications disabled
-                if int(s['sv_service_status__nagios_status__notifications_enabled']) == 0 or int(
-                        s['sv_host__nagios_status__notifications_enabled']) == 0:
-                    continue
- 
-                # 2017_11_05
-                # Skip if Host is acknowledged
-                # if int(s['sv_host__nagios_status__problem_has_been_acknowledged']) == 1 and conf.filter_acknowledged_hosts_services is True:
-                #    continue
-
                 # host and service
                 # 2017_11_05
                 host_name = s['sv_host__nagios__host_name']
@@ -335,10 +312,18 @@ class Monitos3Server( GenericServer ):
                         int(s['sv_service_status__nagios_status__notifications_enabled']))
                     self.new_hosts[host_name].services[service_name].flapping = int(
                         s['sv_service_status__nagios_status__is_flapping'])
+                    
+                    # 2017_11_05
                     if int(s['sv_service_status__nagios_status__problem_has_been_acknowledged']) != 0:
                         self.new_hosts[host_name].services[service_name].acknowledged = True
-                    self.new_hosts[host_name].services[service_name].scheduled_downtime = int(
-                        s['sv_service_status__nagios_status__scheduled_downtime_depth'])
+                    # 2017_11_06
+                    if int(s['sv_service_status__nagios_status__scheduled_downtime_depth']) != 0:
+                        self.new_hosts[host_name].services[service_name].scheduled_downtime = True
+                    # 2017_11_06 Skip if Host or Service has notifications disabled
+                    if int(s['sv_service_status__nagios_status__notifications_enabled']) == 0 or int(s['sv_host__nagios_status__notifications_enabled']) == 0:
+                        self.new_hosts[host_name].services[service_name].notifications_disabled = True
+ 
+
                     self.new_hosts[host_name].services[service_name].status_type = 'soft' if int(
                         s['sv_service_status__nagios_status__state_type']) == 0 else 'hard'
 
@@ -378,16 +363,22 @@ class Monitos3Server( GenericServer ):
         form_data = dict()
         form_data['commandName'] = 'check-now'
 
-        if service == '':
-            form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid})
-            form_data['commandType'] = 'sv_host'
-        else:
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].services[service].svid})
-            form_data['commandType'] = 'sv_service_status'
+        # 2017_11_06
+        try:
+            if service == '':
+                form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid})
+                form_data['commandType'] = 'sv_host'
+            else:
+                form_data['params'] = json.dumps(
+                    {'__SVID': self.hosts[host].services[service].svid})
+                form_data['commandType'] = 'sv_service_status'
 
-        self.session.post(
-            '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+            self.session.post(
+                '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
 
     def _set_acknowledge(self, host, service, author, comment, sticky, notify, persistent, all_services=[]):
         """
