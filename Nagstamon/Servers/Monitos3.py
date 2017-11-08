@@ -33,13 +33,11 @@ from Nagstamon.Servers.Generic import GenericServer
 from Nagstamon.Config import conf
 from Nagstamon.Helpers import webbrowser_open
 
-monitos = 'monitos3'
-import logging
-logging.basicConfig( level=logging.INFO )
-# logging.basicConfig(filename='nagstamon.log',level=logging.INFO)
-log = logging.getLogger(monitos)
-# if conf.debug_mode:
-#   self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 active filter: DOWNTIME')
+#monitos = 'monitos3'
+#import logging
+#logging.basicConfig( level=logging.INFO )
+## logging.basicConfig(filename='nagstamon.log',level=logging.INFO)
+#log = logging.getLogger(monitos)
 
 import requests
 from bs4 import BeautifulSoup
@@ -80,8 +78,8 @@ class Monitos3Server( GenericServer ):
         """
             Set URLs for CGI - they are static and there is no need to set them with every cycle
         """
-        log.info( 'Init monitos3 config at'+time.strftime( '%a %H:%M:%S' ) )
-        log.info( 'monitor_url is: '+self.monitor_url)
+        # log.info( 'Init monitos3 config at'+time.strftime( '%a %H:%M:%S' ) )
+        # log.info( 'monitor_url is: '+self.monitor_url)
         # dummy default empty cgi urls - get filled later when server version is known
         self.cgiurl_services = None
         self.cgiurl_hosts = None
@@ -393,29 +391,40 @@ class Monitos3Server( GenericServer ):
             :param persistent: Bool - Persistent comment
             :param all_services: Array - List of all services (filled only if 'Acknowledge all services on host' is set)
         """
-        form_data = dict()
 
-        if len(all_services) > 0:  # Host & all Services
-            form_data['commandType'] = 'sv_host'
-            form_data['commandName'] = 'acknowledge-host-service-problems'
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
-                 'sticky': sticky})
-        elif service == '':  # Host
-            form_data['commandType'] = 'sv_host'
-            form_data['commandName'] = 'acknowledge-problem'
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
-                 'sticky': sticky})
-        else:  # Service
-            form_data['commandType'] = 'sv_service_status'
-            form_data['commandName'] = 'acknowledge-problem'
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].services[service].svid, 'comment': comment, 'notify': notify,
-                 'persistent': persistent, 'sticky': sticky})
+        # 2017_11_07
+        try:
+            form_data = dict()
 
-        self.session.post(
-            '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+            if len(all_services) > 0:  # Host & all Services
+                form_data['commandType'] = 'sv_host'
+                form_data['commandName'] = 'acknowledge-host-service-problems'
+                form_data['params'] = json.dumps(
+                    {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
+                     'sticky': sticky})
+            elif service == '':  # Host
+                form_data['commandType'] = 'sv_host'
+                form_data['commandName'] = 'acknowledge-problem'
+                form_data['params'] = json.dumps(
+                    {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
+                     'sticky': sticky})
+            else:  # Service
+                form_data['commandType'] = 'sv_service_status'
+                form_data['commandName'] = 'acknowledge-problem'
+                form_data['params'] = json.dumps(
+                    {'__SVID': self.hosts[host].services[service].svid, 'comment': comment, 'notify': notify,
+                     'persistent': persistent, 'sticky': sticky})
+
+            # 2017_11_07
+            if conf.debug_mode:
+               self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge' + form_data)
+
+            self.session.post(
+                '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
 
     def _set_submit_check_result(self, host, service, state, comment, check_output, performance_data):
         """
@@ -439,8 +448,7 @@ class Monitos3Server( GenericServer ):
         # Selecting something else for example 'information' or 'disaster' puts 'ok' into the variable state
         # This makes it impossible to log errors for unsupported states because you can't differentiate
         # between selecting 'ok' and 'information' because in both cases the variable contains 'ok'
-        log.info(
-            'Selecting an unsupported check result submits \'UP\' for hosts and \'OK\' for services!')
+        log.info('Selecting an unsupported check result submits \'UP\' for hosts and \'OK\' for services!')
 
         if service == '':  # Host
             form_data['commandType'] = 'sv_host'
@@ -520,7 +528,7 @@ class Monitos3Server( GenericServer ):
 
             :param host: String - Host name
         """
-        log.info("Flexible Downtimes are not supported in monitos3")
+        # log.info("Flexible Downtimes are not supported in monitos3")
 
         start = datetime.datetime.now()
         end = datetime.datetime.now() + datetime.timedelta(hours=24)
