@@ -393,6 +393,10 @@ class Monitos3Server( GenericServer ):
         """
 
         # 2017_11_07
+        if conf.debug_mode:
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge host is: ' + host)
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge service is: ' + service)
+
         try:
             form_data = dict()
 
@@ -412,12 +416,8 @@ class Monitos3Server( GenericServer ):
                 form_data['commandType'] = 'sv_service_status'
                 form_data['commandName'] = 'acknowledge-problem'
                 form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].services[service].svid, 'comment': comment, 'notify': notify,
-                     'persistent': persistent, 'sticky': sticky})
-
-            # 2017_11_07
-            if conf.debug_mode:
-               self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge' + form_data)
+                    {'__SVID': self.hosts[host].services[service].svid, 'comment': comment, 'notify': int(notify),
+                     'persistent': int(persistent), 'sticky': int(sticky)})
 
             self.session.post(
                 '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
@@ -425,6 +425,12 @@ class Monitos3Server( GenericServer ):
         except:
             import traceback
             traceback.print_exc(file=sys.stdout)
+            self.Error(sys.exc_info())
+
+            # 2017_11_07
+            if conf.debug_mode:
+               self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge' + form_data)
+
 
     def _set_submit_check_result(self, host, service, state, comment, check_output, performance_data):
         """
