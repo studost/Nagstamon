@@ -280,9 +280,10 @@ class Monitos3Server( GenericServer ):
                     continue
 
                 # host and service
-                # 2017_11_05
+                # 2017_11_09, this is a hack
                 host_name = s['sv_host__nagios__host_name']
-                service_name = s['sv_service_status__svobjects__rendered_label']
+                service_name = s['sv_service_status__nagios__service_description']
+                # service_name = s['sv_service_status__svobjects__rendered_label']
                 display_name = s['sv_service_status__nagios__service_description']
 
                 # If a service does not exist, create its object
@@ -358,17 +359,22 @@ class Monitos3Server( GenericServer ):
             :param host: String - Host name
             :param service: String - Service name
         """
+        # log.info('info_dict is: %s', info_dict )
         form_data = dict()
         form_data['commandName'] = 'check-now'
 
         # 2017_11_06
         try:
             if service == '':
+                if conf.debug_mode:
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_recheck, host is: ' + self.hosts[host].svid)
                 form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid})
                 form_data['commandType'] = 'sv_host'
             else:
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].services[service].svid})
+                if conf.debug_mode:
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_recheck, service is: ' + self.hosts[host].services[service].svid)
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_recheck, services are: ' + repr( self.hosts[host].services ) )
+                form_data['params'] = json.dumps({'__SVID': self.hosts[host].services[service].svid})
                 form_data['commandType'] = 'sv_service_status'
 
             self.session.post(
@@ -377,6 +383,8 @@ class Monitos3Server( GenericServer ):
         except:
             import traceback
             traceback.print_exc(file=sys.stdout)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
 
     def _set_acknowledge(self, host, service, author, comment, sticky, notify, persistent, all_services=[]):
         """
@@ -394,24 +402,23 @@ class Monitos3Server( GenericServer ):
 
         # 2017_11_07
         if conf.debug_mode:
-            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge host is: ' + host)
-            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge service is: ' + service)
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_acknowledge host is: ' + host)
+            if service != '':  # service
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_acknowledge service is: ' + service)
 
         try:
             form_data = dict()
 
-            if len(all_services) > 0:  # Host & all Services
+            if len(all_services) > 0:       # Host & all Services
                 form_data['commandType'] = 'sv_host'
                 form_data['commandName'] = 'acknowledge-host-service-problems'
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
-                     'sticky': sticky})
-            elif service == '':  # Host
+                form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': int(notify), 'persistent': int(persistent), 'sticky': int(sticky)})
+            elif service == '':             # Host
                 form_data['commandType'] = 'sv_host'
                 form_data['commandName'] = 'acknowledge-problem'
                 form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
-                     'sticky': sticky})
+                    {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': int(notify), 'persistent': int(persistent),
+                     'sticky': int(sticky)})
             else:  # Service
                 form_data['commandType'] = 'sv_service_status'
                 form_data['commandName'] = 'acknowledge-problem'
@@ -425,11 +432,8 @@ class Monitos3Server( GenericServer ):
         except:
             import traceback
             traceback.print_exc(file=sys.stdout)
-            self.Error(sys.exc_info())
-
-            # 2017_11_07
-            if conf.debug_mode:
-               self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + 'monitos3 _set_acknowledge' + form_data)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
 
 
     def _set_submit_check_result(self, host, service, state, comment, check_output, performance_data):
@@ -502,31 +506,49 @@ class Monitos3Server( GenericServer ):
             :param hours: NOT SUPPORTED - Integer - Flexible Downtime
             :param minutes: NOT SUPPORTED - Integer - Flexible Downtime
         """
-        form_data = dict()
+        if conf.debug_mode:
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_downtime host is: ' + host)
+            if service != '':  # service
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_downtime service is: ' + service)
+        try:
+            form_data = dict()
 
-        if service == '':
-            form_data['type'] = 'sv_host'
-            form_data['host_effects'] = 'hostOnly'
-            form_data['svid'] = self.hosts[host].svid
-        else:
-            form_data['type'] = 'sv_service_status'
-            form_data['svid'] = self.hosts[host].services[service].svid
+            if service == '':
+                form_data['type'] = 'sv_host'
+                form_data['host_effects'] = 'hostOnly'
+                form_data['host'] = self.hosts[host].svid
+                # form_data['svid'] = self.hosts[host].svid
+            else:
+                form_data['type'] = 'sv_service_status'
+                form_data['svid'] = self.hosts[host].services[service].svid
 
-        # Format start_time and end_time from user-friendly format to timestamp
-        start_time = time.mktime(datetime.datetime.strptime(
-            start_time, "%Y-%m-%d %H:%M:%S").timetuple())
-        start_time = str(start_time).split('.')[0]
+            # Format start_time and end_time from user-friendly format to timestamp
+            start_time = time.mktime(datetime.datetime.strptime(
+                start_time, "%Y-%m-%d %H:%M:%S").timetuple())
+            start_time = str(start_time).split('.')[0]
 
-        end_time = time.mktime(datetime.datetime.strptime(
-            end_time, "%Y-%m-%d %H:%M:%S").timetuple())
-        end_time = str(end_time).split('.')[0]
+            end_time = time.mktime(datetime.datetime.strptime(
+                end_time, "%Y-%m-%d %H:%M:%S").timetuple())
+            end_time = str(end_time).split('.')[0]
 
-        form_data['start'] = start_time
-        form_data['end'] = end_time
-        form_data['comment'] = comment
+            form_data['start'] = start_time
+            form_data['end'] = end_time
+            form_data['comment'] = comment
+            form_data['is_recurring'] = 'false'
+            form_data['schedule_now'] = 'false'
 
-        self.session.put(
-            '{0}/rest/private/nagios/downtime'.format(self.monitor_url), data=form_data)
+            if conf.debug_mode:
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos3 _set_downtime, form_data are: ' + repr( form_data ) )
+
+            self.session.put(
+                '{0}/rest/private/nagios/downtime'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
+
 
     def get_start_end(self, host):
         """
