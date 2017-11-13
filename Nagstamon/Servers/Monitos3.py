@@ -447,50 +447,61 @@ class Monitos3Server( GenericServer ):
             :param check_output: String - Check output
             :param performance_data: String - Performance data
         """
-        state = state.upper()
+        if conf.debug_mode:
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' mos3 _set_submit_check_result, host is: ' + host)
+            if service != '':  # service
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' mos3 _set_submit_check_result, service is: ' + service)
+        try:
+            state = state.upper()
 
-        form_data = dict()
-        form_data['commandName'] = 'process-check-result'
+            form_data = dict()
+            form_data['commandName'] = 'process-check-result'
 
-        # TODO 'state' contains wrong information
-        # Variable 'state' can contain any standard state
-        # ('up','down','unreachable', 'ok', 'warning', 'critical' or 'unknown')
-        # Selecting something else for example 'information' or 'disaster' puts 'ok' into the variable state
-        # This makes it impossible to log errors for unsupported states because you can't differentiate
-        # between selecting 'ok' and 'information' because in both cases the variable contains 'ok'
-        log.info('Selecting an unsupported check result submits \'UP\' for hosts and \'OK\' for services!')
+            # TODO 'state' contains wrong information
+            # Variable 'state' can contain any standard state
+            # ('up','down','unreachable', 'ok', 'warning', 'critical' or 'unknown')
+            # Selecting something else for example 'information' or 'disaster' puts 'ok' into the variable state
+            # This makes it impossible to log errors for unsupported states because you can't differentiate
+            # between selecting 'ok' and 'information' because in both cases the variable contains 'ok'
+            # log.info('Selecting an unsupported check result submits \'UP\' for hosts and \'OK\' for services!')
 
-        if service == '':  # Host
-            form_data['commandType'] = 'sv_host'
+            if service == '':  # Host
+                form_data['commandType'] = 'sv_host'
 
-            if state == 'OK' or state == 'UNKNOWN':
-                log.info('Setting OK or UNKNOWN to UP')
-                state = 'UP'
+                if state == 'OK' or state == 'UNKNOWN':
+                    # log.info('Setting OK or UNKNOWN to UP')
+                    state = 'UP'
 
-            state_number = self.STATES_MAPPING_REV['hosts'][state]
+                state_number = self.STATES_MAPPING_REV['hosts'][state]
 
-            if performance_data == '':
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].svid, 'status_code': state_number, 'plugin_output': check_output})
-            else:
-                form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid, 'status_code': state_number,
-                                                  'plugin_output': check_output + ' | ' + performance_data})
-        else:  # Service
-            form_data['commandType'] = 'sv_service_status'
+                if performance_data == '':
+                    form_data['params'] = json.dumps(
+                        {'__SVID': self.hosts[host].svid, 'status_code': state_number, 'plugin_output': check_output})
+                else:
+                    form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid, 'status_code': state_number,
+                                                      'plugin_output': check_output + ' | ' + performance_data})
+            else:  # Service
+                form_data['commandType'] = 'sv_service_status'
 
-            state_number = self.STATES_MAPPING_REV['services'][state]
+                state_number = self.STATES_MAPPING_REV['services'][state]
 
-            if performance_data == '':
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
-                     'plugin_output': check_output})
-            else:
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
-                     'plugin_output': check_output + ' | ' + performance_data})
+                if performance_data == '':
+                    form_data['params'] = json.dumps(
+                        {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
+                         'plugin_output': check_output})
+                else:
+                    form_data['params'] = json.dumps(
+                        {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
+                         'plugin_output': check_output + ' | ' + performance_data})
 
-        self.session.post(
-            '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+            self.session.post(
+                '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
 
     def _set_downtime(self, host, service, author, comment, fixed, start_time, end_time, hours, minutes):
         """
@@ -515,12 +526,14 @@ class Monitos3Server( GenericServer ):
 
             if service == '':
                 form_data['type'] = 'sv_host'
-                form_data['host_effects'] = 'hostOnly'
+                form_data['host_effects'] = 'hostServices'
+                # form_data['host_effects'] = 'hostOnly'
                 form_data['host'] = self.hosts[host].svid
                 # form_data['svid'] = self.hosts[host].svid
             else:
                 form_data['type'] = 'sv_service_status'
-                form_data['svid'] = self.hosts[host].services[service].svid
+                form_data['service'] = self.hosts[host].services[service].svid
+                # form_data['svid'] = self.hosts[host].services[service].svid
 
             # Format start_time and end_time from user-friendly format to timestamp
             start_time = time.mktime(datetime.datetime.strptime(
