@@ -526,7 +526,7 @@ class Monitos3Server( GenericServer ):
 
             if service == '':
                 form_data['type'] = 'sv_host'
-                form_data['host_effects'] = 'hostServices'
+                form_data['host_effects'] = 'hostAndServices'
                 # form_data['host_effects'] = 'hostOnly'
                 form_data['host'] = self.hosts[host].svid
                 # form_data['svid'] = self.hosts[host].svid
