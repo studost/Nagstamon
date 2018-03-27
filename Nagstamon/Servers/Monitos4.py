@@ -21,7 +21,7 @@
 # Initial implementation by Marcus Mönnig
 #
 # Changelog:
-# studo, adopted initial implementation for monitos 4
+# studo, 2018_03_27, adopted initial implementation for Monitos4
 #
 # TODOs:
 # a lot i'm sure
@@ -33,10 +33,11 @@ from Nagstamon.Servers.Generic import GenericServer
 from Nagstamon.Config import conf
 from Nagstamon.Helpers import webbrowser_open
 
-import logging
-logging.basicConfig( level=logging.INFO )
-# logging.basicConfig(filename='nagstamon.log',level=logging.INFO)
-log = logging.getLogger('Monitos4')
+#monitos = 'monitos4'
+#import logging
+#logging.basicConfig( level=logging.INFO )
+## logging.basicConfig(filename='nagstamon.log',level=logging.INFO)
+#log = logging.getLogger(monitos)
 
 import requests
 from bs4 import BeautifulSoup
@@ -59,7 +60,7 @@ def strfdelta(tdelta, fmt):
 class Monitos4Server( GenericServer ):
     """A server running Monitos4 from Freicon.
        http://www.monitos.de
-       Tested with monitos4 0.4.0
+       Tested with monitos 4.1
     """
     TYPE = 'Monitos4'
     
@@ -77,8 +78,8 @@ class Monitos4Server( GenericServer ):
         """
             Set URLs for CGI - they are static and there is no need to set them with every cycle
         """
-        log.info( 'Init monitos4 config at'+time.strftime( '%a %H:%M:%S' ) )
-        log.info( 'monitor_url is: '+self.monitor_url)
+        # log.info( 'Init monitos4 config at'+time.strftime( '%a %H:%M:%S' ) )
+        # log.info( 'monitor_url is: '+self.monitor_url)
         # dummy default empty cgi urls - get filled later when server version is known
         self.cgiurl_services = None
         self.cgiurl_hosts = None
@@ -93,9 +94,13 @@ class Monitos4Server( GenericServer ):
 
         if len(self.session.cookies) == 0:
             form_inputs = dict()
-            if self.username.startswith('ldap:'):
+            if '@' in self.username:
+                user = self.username.split('@')
                 form_inputs['module'] = 'ldap'
-                form_inputs['_username'] = self.username[5:]
+                form_inputs['_username'] = user[0]
+            #if self.username.startswith('ldap:'):
+            #    form_inputs['module'] = 'ldap'
+            #    form_inputs['_username'] = self.username[5:]
             else:
                 form_inputs['module'] = 'sv'
                 form_inputs['_username'] = self.username
@@ -119,18 +124,22 @@ class Monitos4Server( GenericServer ):
         # define CGI URLs for hosts and services
         if self.cgiurl_hosts == None:
             # hosts (up, down, unreachable or pending)
+            # https://locmos41xsupport/rest/private/nagios/host 
             self.cgiurl_hosts = self.monitor_cgi_url + '/rest/private/nagios/host'
 
         if self.cgiurl_services == None:
             # services (warning, critical, unknown or pending)
+            # https://locmos41xsupport/rest/private/nagios/service_status/browser 
             self.cgiurl_services = self.monitor_cgi_url + \
                                    '/rest/private/nagios/service_status/browser'
 
         self.new_hosts = dict()
 
         # hosts
-        # if conf.filter_acknowledged_hosts_services:
-        #    filters.append('Filter: acknowledged != 1')
+#            if conf.filter_acknowledged_hosts_services is True:
+#                if conf.debug_mode:
+#                    self.Debug(server=self.get_name(), debug=monitos + time.strftime('%a %H:%M:%S') + ' active filter_acknowledged_hosts_services')
+#                form_data['acknowledged'] = 0
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
@@ -180,10 +189,6 @@ class Monitos4Server( GenericServer ):
                 if int(h['sv_host__nagios_status__current_state']) == 4:
                     continue
 
-                # Skip if Host has notifications disabled
-                if int(h['sv_host__nagios_status__notifications_enabled']) == 0:
-                    continue
-
                 # host
                 host_name = h['sv_host__nagios__host_name']
 
@@ -205,10 +210,18 @@ class Monitos4Server( GenericServer ):
                         int(h['sv_host__nagios_status__notifications_enabled']))
                     self.new_hosts[host_name].flapping = int(
                         h['sv_host__nagios_status__is_flapping'])
-                    self.new_hosts[host_name].acknowledged = int(
-                        h['sv_host__nagios_status__problem_has_been_acknowledged'])
-                    self.new_hosts[host_name].scheduled_downtime = int(
-                        h['sv_host__nagios_status__scheduled_downtime_depth'])
+
+                    # 2017_11_06
+                    if int(h['sv_host__nagios_status__problem_has_been_acknowledged']) != 0:
+                        self.new_hosts[host_name].acknowledged = True
+                    # 2017_11_06
+                    if int(h['sv_host__nagios_status__scheduled_downtime_depth']) != 0:
+                        self.new_hosts[host_name].scheduled_downtime = True
+                    
+                    # 2017_11_06 Skip if Host has notifications disabled
+                    if int(h['sv_host__nagios_status__notifications_enabled']) == 0:
+                        self.new_hosts[host_name].notifications_disabled = True
+
                     self.new_hosts[host_name].status_type = 'soft' if int(
                         h['sv_host__nagios_status__state_type']) == 0 else 'hard'
 
@@ -230,6 +243,8 @@ class Monitos4Server( GenericServer ):
             return Result(result=result, error=error)
 
         # services
+        # 2018_03_27
+        # https://locmos41xsupport/rest/private/nagios/service_status/browser
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
@@ -266,23 +281,21 @@ class Monitos4Server( GenericServer ):
                         s['sv_host__nagios_status__current_state']) == 4:
                     continue
 
-                # Skip if Host or Service has notifications disabled
-                if int(s['sv_service_status__nagios_status__notifications_enabled']) == 0 or int(
-                        s['sv_host__nagios_status__notifications_enabled']) == 0:
-                    continue
-
                 # host and service
+                # 2017_11_09, this is a hack
                 host_name = s['sv_host__nagios__host_name']
-                service_name = s['sv_service_status__svobjects__rendered_label']
+                service_name = s['sv_service_status__nagios__service_description']
+                # service_name = s['sv_service_status__svobjects__rendered_label']
+                display_name = s['sv_service_status__nagios__service_description']
 
                 # If a service does not exist, create its object
                 if service_name not in self.new_hosts[host_name].services:
                     self.new_hosts[host_name].services[service_name] = GenericService(
                     )
                     self.new_hosts[host_name].services[service_name].host = host_name
-                    self.new_hosts[host_name].services[service_name].svid = s[
-                        'sv_service_status__svobjects____SVID']
-                    self.new_hosts[host_name].services[service_name].name = service_name
+                    self.new_hosts[host_name].services[service_name].svid = s['sv_service_status__svobjects____SVID']
+                    self.new_hosts[host_name].services[service_name].name = display_name
+                    # self.new_hosts[host_name].services[service_name].name = service_name
                     self.new_hosts[host_name].services[service_name].server = self.name
                     self.new_hosts[host_name].services[service_name].status = self.STATES_MAPPING['services'][int(
                         s['sv_service_status__nagios_status__current_state'])]
@@ -300,10 +313,18 @@ class Monitos4Server( GenericServer ):
                         int(s['sv_service_status__nagios_status__notifications_enabled']))
                     self.new_hosts[host_name].services[service_name].flapping = int(
                         s['sv_service_status__nagios_status__is_flapping'])
-                    self.new_hosts[host_name].services[service_name].acknowledged = int(
-                        s['sv_service_status__nagios_status__problem_has_been_acknowledged'])
-                    self.new_hosts[host_name].services[service_name].scheduled_downtime = int(
-                        s['sv_service_status__nagios_status__scheduled_downtime_depth'])
+                    
+                    # 2017_11_05
+                    if int(s['sv_service_status__nagios_status__problem_has_been_acknowledged']) != 0:
+                        self.new_hosts[host_name].services[service_name].acknowledged = True
+                    # 2017_11_06
+                    if int(s['sv_service_status__nagios_status__scheduled_downtime_depth']) != 0:
+                        self.new_hosts[host_name].services[service_name].scheduled_downtime = True
+                    # 2017_11_06 Skip if Host or Service has notifications disabled
+                    if int(s['sv_service_status__nagios_status__notifications_enabled']) == 0 or int(s['sv_host__nagios_status__notifications_enabled']) == 0:
+                        self.new_hosts[host_name].services[service_name].notifications_disabled = True
+ 
+
                     self.new_hosts[host_name].services[service_name].status_type = 'soft' if int(
                         s['sv_service_status__nagios_status__state_type']) == 0 else 'hard'
 
@@ -340,19 +361,33 @@ class Monitos4Server( GenericServer ):
             :param host: String - Host name
             :param service: String - Service name
         """
+        # log.info('info_dict is: %s', info_dict )
         form_data = dict()
         form_data['commandName'] = 'check-now'
 
-        if service == '':
-            form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid})
-            form_data['commandType'] = 'sv_host'
-        else:
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].services[service].svid})
-            form_data['commandType'] = 'sv_service_status'
+        # TODO: 2018_03_27, test endpoint
+        # https://locmos41xsupport/rest/private/nagios/command/execute
+        try:
+            if service == '':
+                if conf.debug_mode:
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, host is: ' + self.hosts[host].svid)
+                form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid})
+                form_data['commandType'] = 'sv_host'
+            else:
+                if conf.debug_mode:
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, service is: ' + self.hosts[host].services[service].svid)
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, services are: ' + repr( self.hosts[host].services ) )
+                form_data['params'] = json.dumps({'__SVID': self.hosts[host].services[service].svid})
+                form_data['commandType'] = 'sv_service_status'
 
-        self.session.post(
-            '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+            self.session.post(
+                '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
 
     def _set_acknowledge(self, host, service, author, comment, sticky, notify, persistent, all_services=[]):
         """
@@ -367,29 +402,44 @@ class Monitos4Server( GenericServer ):
             :param persistent: Bool - Persistent comment
             :param all_services: Array - List of all services (filled only if 'Acknowledge all services on host' is set)
         """
-        form_data = dict()
 
-        if len(all_services) > 0:  # Host & all Services
-            form_data['commandType'] = 'sv_host'
-            form_data['commandName'] = 'acknowledge-host-service-problems'
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
-                 'sticky': sticky})
-        elif service == '':  # Host
-            form_data['commandType'] = 'sv_host'
-            form_data['commandName'] = 'acknowledge-problem'
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': notify, 'persistent': persistent,
-                 'sticky': sticky})
-        else:  # Service
-            form_data['commandType'] = 'sv_service_status'
-            form_data['commandName'] = 'acknowledge-problem'
-            form_data['params'] = json.dumps(
-                {'__SVID': self.hosts[host].services[service].svid, 'comment': comment, 'notify': notify,
-                 'persistent': persistent, 'sticky': sticky})
+        # 2017_11_07
+        if conf.debug_mode:
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_acknowledge host is: ' + host)
+            if service != '':  # service
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_acknowledge service is: ' + service)
 
-        self.session.post(
-            '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+        try:
+            form_data = dict()
+
+            if len(all_services) > 0:       # Host & all Services
+                form_data['commandType'] = 'sv_host'
+                form_data['commandName'] = 'acknowledge-host-service-problems'
+                form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': int(notify), 'persistent': int(persistent), 'sticky': int(sticky)})
+            elif service == '':             # Host
+                form_data['commandType'] = 'sv_host'
+                form_data['commandName'] = 'acknowledge-problem'
+                form_data['params'] = json.dumps(
+                    {'__SVID': self.hosts[host].svid, 'comment': comment, 'notify': int(notify), 'persistent': int(persistent),
+                     'sticky': int(sticky)})
+            else:  # Service
+                form_data['commandType'] = 'sv_service_status'
+                form_data['commandName'] = 'acknowledge-problem'
+                form_data['params'] = json.dumps(
+                    {'__SVID': self.hosts[host].services[service].svid, 'comment': comment, 'notify': int(notify),
+                     'persistent': int(persistent), 'sticky': int(sticky)})
+
+            # TODO: 2018_03_27, test endpoint
+            # https://locmos41xsupport/rest/private/nagios/command/execute
+            self.session.post(
+                '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
+
 
     def _set_submit_check_result(self, host, service, state, comment, check_output, performance_data):
         """
@@ -402,51 +452,63 @@ class Monitos4Server( GenericServer ):
             :param check_output: String - Check output
             :param performance_data: String - Performance data
         """
-        state = state.upper()
+        if conf.debug_mode:
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' mos3 _set_submit_check_result, host is: ' + host)
+            if service != '':  # service
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' mos3 _set_submit_check_result, service is: ' + service)
+        try:
+            state = state.upper()
 
-        form_data = dict()
-        form_data['commandName'] = 'process-check-result'
+            form_data = dict()
+            form_data['commandName'] = 'process-check-result'
 
-        # TODO 'state' contains wrong information
-        # Variable 'state' can contain any standard state
-        # ('up','down','unreachable', 'ok', 'warning', 'critical' or 'unknown')
-        # Selecting something else for example 'information' or 'disaster' puts 'ok' into the variable state
-        # This makes it impossible to log errors for unsupported states because you can't differentiate
-        # between selecting 'ok' and 'information' because in both cases the variable contains 'ok'
-        log.info(
-            'Selecting an unsupported check result submits \'UP\' for hosts and \'OK\' for services!')
+            # TODO 'state' contains wrong information
+            # Variable 'state' can contain any standard state
+            # ('up','down','unreachable', 'ok', 'warning', 'critical' or 'unknown')
+            # Selecting something else for example 'information' or 'disaster' puts 'ok' into the variable state
+            # This makes it impossible to log errors for unsupported states because you can't differentiate
+            # between selecting 'ok' and 'information' because in both cases the variable contains 'ok'
+            # log.info('Selecting an unsupported check result submits \'UP\' for hosts and \'OK\' for services!')
 
-        if service == '':  # Host
-            form_data['commandType'] = 'sv_host'
+            if service == '':  # Host
+                form_data['commandType'] = 'sv_host'
 
-            if state == 'OK' or state == 'UNKNOWN':
-                log.info('Setting OK or UNKNOWN to UP')
-                state = 'UP'
+                if state == 'OK' or state == 'UNKNOWN':
+                    # log.info('Setting OK or UNKNOWN to UP')
+                    state = 'UP'
 
-            state_number = self.STATES_MAPPING_REV['hosts'][state]
+                state_number = self.STATES_MAPPING_REV['hosts'][state]
 
-            if performance_data == '':
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].svid, 'status_code': state_number, 'plugin_output': check_output})
-            else:
-                form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid, 'status_code': state_number,
-                                                  'plugin_output': check_output + ' | ' + performance_data})
-        else:  # Service
-            form_data['commandType'] = 'sv_service_status'
+                if performance_data == '':
+                    form_data['params'] = json.dumps(
+                        {'__SVID': self.hosts[host].svid, 'status_code': state_number, 'plugin_output': check_output})
+                else:
+                    form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid, 'status_code': state_number,
+                                                      'plugin_output': check_output + ' | ' + performance_data})
+            else:  # Service
+                form_data['commandType'] = 'sv_service_status'
 
-            state_number = self.STATES_MAPPING_REV['services'][state]
+                state_number = self.STATES_MAPPING_REV['services'][state]
 
-            if performance_data == '':
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
-                     'plugin_output': check_output})
-            else:
-                form_data['params'] = json.dumps(
-                    {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
-                     'plugin_output': check_output + ' | ' + performance_data})
+                if performance_data == '':
+                    form_data['params'] = json.dumps(
+                        {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
+                         'plugin_output': check_output})
+                else:
+                    form_data['params'] = json.dumps(
+                        {'__SVID': self.hosts[host].services[service].svid, 'status_code': state_number,
+                         'plugin_output': check_output + ' | ' + performance_data})
 
-        self.session.post(
-            '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+            # TODO: 2018_03_27, test endpoint
+            # https://locmos41xsupport/rest/private/nagios/command/execute
+            self.session.post(
+                '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
 
     def _set_downtime(self, host, service, author, comment, fixed, start_time, end_time, hours, minutes):
         """
@@ -462,31 +524,54 @@ class Monitos4Server( GenericServer ):
             :param hours: NOT SUPPORTED - Integer - Flexible Downtime
             :param minutes: NOT SUPPORTED - Integer - Flexible Downtime
         """
-        form_data = dict()
+        if conf.debug_mode:
+            self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime host is: ' + host)
+            if service != '':  # service
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime service is: ' + service)
+        try:
+            form_data = dict()
 
-        if service == '':
-            form_data['type'] = 'sv_host'
-            form_data['host_effects'] = 'hostOnly'
-            form_data['svid'] = self.hosts[host].svid
-        else:
-            form_data['type'] = 'sv_service_status'
-            form_data['svid'] = self.hosts[host].services[service].svid
+            if service == '':
+                form_data['type'] = 'sv_host'
+                form_data['host_effects'] = 'hostAndServices'
+                # form_data['host_effects'] = 'hostOnly'
+                form_data['host'] = self.hosts[host].svid
+                # form_data['svid'] = self.hosts[host].svid
+            else:
+                form_data['type'] = 'sv_service_status'
+                form_data['service'] = self.hosts[host].services[service].svid
+                # form_data['svid'] = self.hosts[host].services[service].svid
 
-        # Format start_time and end_time from user-friendly format to timestamp
-        start_time = time.mktime(datetime.datetime.strptime(
-            start_time, "%Y-%m-%d %H:%M:%S").timetuple())
-        start_time = str(start_time).split('.')[0]
+            # Format start_time and end_time from user-friendly format to timestamp
+            start_time = time.mktime(datetime.datetime.strptime(
+                start_time, "%Y-%m-%d %H:%M:%S").timetuple())
+            start_time = str(start_time).split('.')[0]
 
-        end_time = time.mktime(datetime.datetime.strptime(
-            end_time, "%Y-%m-%d %H:%M:%S").timetuple())
-        end_time = str(end_time).split('.')[0]
+            end_time = time.mktime(datetime.datetime.strptime(
+                end_time, "%Y-%m-%d %H:%M:%S").timetuple())
+            end_time = str(end_time).split('.')[0]
 
-        form_data['start'] = start_time
-        form_data['end'] = end_time
-        form_data['comment'] = comment
+            form_data['start'] = start_time
+            form_data['end'] = end_time
+            form_data['comment'] = comment
+            form_data['is_recurring'] = 'false'
+            form_data['schedule_now'] = 'false'
 
-        self.session.put(
-            '{0}/rest/private/nagios/downtime'.format(self.monitor_url), data=form_data)
+            if conf.debug_mode:
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime, form_data are: ' + repr( form_data ) )
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime url: ' + '{0}/rest/private/nagios/downtime'.format(self.monitor_url) + repr(data=form_data))
+
+            # TODO: 2018_03_27, test endpoint
+            # https://locmos41xsupport/rest/private/nagios/downtime
+            self.session.put(
+                '{0}/rest/private/nagios/downtime'.format(self.monitor_url), data=form_data)
+
+        except:
+            import traceback
+            traceback.print_exc(file=sys.stdout)
+            result, error = self.Error(sys.exc_info())
+            return Result(result=result, error=error, status_code=-1)
+
 
     def get_start_end(self, host):
         """
@@ -494,7 +579,7 @@ class Monitos4Server( GenericServer ):
 
             :param host: String - Host name
         """
-        log.info("Flexible Downtimes are not supported in monitos4")
+        # log.info("Flexible Downtimes are not supported in monitos4")
 
         start = datetime.datetime.now()
         end = datetime.datetime.now() + datetime.timedelta(hours=24)

@@ -1,6 +1,28 @@
 # How to build Nagstamon
 
 
+## My builds
+
+* 2018_03_27 Nagstamon-3.1-20180327-monitos
+
+
+### env C:\projects\github\studost\Nagstamon\build
+
+```
+python build.py
+```
+
+Installer
+C:\projects\github\studost\Nagstamon\build\dist\Nagstamon-3.1-20180327-monitos-win64_setup.exe
+
+
+
+### Logfile
+
+
+C:\Users\ustachowiak\nagstamon.log
+
+
 ## Requirements
 
 * https://nagstamon.ifw-dresden.de/docs/requirements/
