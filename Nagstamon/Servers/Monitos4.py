@@ -58,7 +58,7 @@ def strfdelta(tdelta, fmt):
 
 
 class Monitos4Server( GenericServer ):
-    """A server running Monitos4 from Freicon.
+    """A server running Monitos4 from Freicon GmbH & Co. KG
        http://www.monitos.de
        Tested with monitos 4.1
     """
@@ -125,21 +125,33 @@ class Monitos4Server( GenericServer ):
         if self.cgiurl_hosts == None:
             # hosts (up, down, unreachable or pending)
             # https://locmos41xsupport/rest/private/nagios/host 
-            self.cgiurl_hosts = self.monitor_cgi_url + '/rest/private/nagios/host'
+            if self.use_autologin == True:
+                self.cgiurl_hosts = self.monitor_cgi_url + '/rest/private/nagios/host' + '?authtoken=' + self.autologin_key
+            else:
+                self.cgiurl_hosts = self.monitor_cgi_url + '/rest/private/nagios/host'
+
+            if conf.debug_mode == True:
+                self.Debug(server=self.get_name(), debug='cgiurl_hosts is: ' + self.cgiurl_hosts)
 
         if self.cgiurl_services == None:
             # services (warning, critical, unknown or pending)
             # https://locmos41xsupport/rest/private/nagios/service_status/browser 
-            self.cgiurl_services = self.monitor_cgi_url + \
+            if self.use_autologin == True:
+                self.cgiurl_services = self.monitor_cgi_url + \
+                                   '/rest/private/nagios/service_status/browser' + '?authtoken=' + self.autologin_key
+            else:
+                self.cgiurl_services = self.monitor_cgi_url + \
                                    '/rest/private/nagios/service_status/browser'
+
+            if conf.debug_mode == True:
+                self.Debug(server=self.get_name(), debug='cgiurl_services is: ' + self.cgiurl_services)
 
         self.new_hosts = dict()
 
+        if conf.debug_mode == True:
+            self.Debug(server=self.get_name(), debug='monitos4 Authtoken is: ' + self.autologin_key)
+
         # hosts
-#            if conf.filter_acknowledged_hosts_services is True:
-#                if conf.debug_mode:
-#                    self.Debug(server=self.get_name(), debug=monitos + time.strftime('%a %H:%M:%S') + ' active filter_acknowledged_hosts_services')
-#                form_data['acknowledged'] = 0
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
@@ -149,6 +161,8 @@ class Monitos4Server( GenericServer ):
             form_data['limit_start'] = 0
             # Get all hosts
             form_data['limit_length'] = 99999
+            #if self.use_autologin == True:
+            #    form_data['authtoken'] = self.autologin_key
 
             result = self.FetchURL(
                 self.cgiurl_hosts, giveback='raw', cgi_data=form_data)
@@ -179,6 +193,8 @@ class Monitos4Server( GenericServer ):
                               status_code=status_code)
 
             self.check_for_error(jsonraw, error, status_code)
+            if conf.debug_mode:
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 hosts are: ' + jsonraw)
 
             hosts = json.loads(jsonraw)
 
@@ -186,7 +202,7 @@ class Monitos4Server( GenericServer ):
                 h = dict(host)
 
                 # Skip if Host is 'Pending'
-                if int(h['sv_host__nagios_status__current_state']) == 4:
+                if type(h['sv_host__nagios_status__current_state']) is int and int(h['sv_host__nagios_status__current_state']) == 4:
                     continue
 
                 # host
@@ -204,26 +220,27 @@ class Monitos4Server( GenericServer ):
                         int(h['sv_host__nagios_status__last_check']))
                     self.new_hosts[host_name].attempt = h['sv_host__nagios__max_check_attempts']
                     self.new_hosts[host_name].status_information = h['sv_host__nagios_status__plugin_output']
-                    self.new_hosts[host_name].passiveonly = not (
-                        int(h['sv_host__nagios_status__checks_enabled']))
-                    self.new_hosts[host_name].notifications_disabled = not (
-                        int(h['sv_host__nagios_status__notifications_enabled']))
-                    self.new_hosts[host_name].flapping = int(
-                        h['sv_host__nagios_status__is_flapping'])
-
+                    if type(h['sv_host__nagios_status__checks_enabled']) is int:
+                        self.new_hosts[host_name].passiveonly = not (int(h['sv_host__nagios_status__checks_enabled']))
+                    if type(h['sv_host__nagios_status__is_flapping']) is int:
+                        if int(h['sv_host__nagios_status__is_flapping']) != 0:
+                            self.new_hosts[host_name].flapping = True
                     # 2017_11_06
-                    if int(h['sv_host__nagios_status__problem_has_been_acknowledged']) != 0:
-                        self.new_hosts[host_name].acknowledged = True
+                    if type(h['sv_host__nagios_status__problem_has_been_acknowledged']) is int:
+                        if int(h['sv_host__nagios_status__problem_has_been_acknowledged']) != 0:
+                            self.new_hosts[host_name].acknowledged = True
                     # 2017_11_06
-                    if int(h['sv_host__nagios_status__scheduled_downtime_depth']) != 0:
+                    if type(h['sv_host__nagios_status__scheduled_downtime_depth']) is int and int(h['sv_host__nagios_status__scheduled_downtime_depth']) != 0:
                         self.new_hosts[host_name].scheduled_downtime = True
                     
                     # 2017_11_06 Skip if Host has notifications disabled
-                    if int(h['sv_host__nagios_status__notifications_enabled']) == 0:
-                        self.new_hosts[host_name].notifications_disabled = True
+                    if type(h['sv_host__nagios_status__notifications_enabled']) is int:
+                        if int(h['sv_host__nagios_status__notifications_enabled']) == 0:
+                            self.new_hosts[host_name].notifications_disabled = True
 
-                    self.new_hosts[host_name].status_type = 'soft' if int(
-                        h['sv_host__nagios_status__state_type']) == 0 else 'hard'
+                    if type( h['sv_host__nagios_status__state_type']) is int:
+                        self.new_hosts[host_name].status_type = 'soft' if int(
+                            h['sv_host__nagios_status__state_type']) == 0 else 'hard'
 
                     # extra duration needed for calculation
                     duration = datetime.datetime.now(
@@ -255,6 +272,8 @@ class Monitos4Server( GenericServer ):
             form_data['limit_start'] = 0
             # Get all services
             form_data['limit_length'] = 99999
+            #if self.use_autologin == True:
+            #    form_data['authtoken'] = self.autologin_key
 
             result = self.FetchURL(self.cgiurl_services,
                                    giveback='raw', cgi_data=form_data)
@@ -309,10 +328,8 @@ class Monitos4Server( GenericServer ):
                         'html.parser').text
                     self.new_hosts[host_name].services[service_name].passiveonly = not (
                         int(s['sv_service_status__nagios_status__checks_enabled']))
-                    self.new_hosts[host_name].services[service_name].notifications_disabled = not (
-                        int(s['sv_service_status__nagios_status__notifications_enabled']))
-                    self.new_hosts[host_name].services[service_name].flapping = int(
-                        s['sv_service_status__nagios_status__is_flapping'])
+                    if int(s['sv_service_status__nagios_status__is_flapping']) != 0:
+                        self.new_hosts[host_name].services[service_name].flapping = True
                     
                     # 2017_11_05
                     if int(s['sv_service_status__nagios_status__problem_has_been_acknowledged']) != 0:
@@ -523,6 +540,17 @@ class Monitos4Server( GenericServer ):
             :param end_time: String - Date in Y-m-d H:M:S format - End of Downtime
             :param hours: NOT SUPPORTED - Integer - Flexible Downtime
             :param minutes: NOT SUPPORTED - Integer - Flexible Downtime
+
+
+            curl 'https://locmos41xsupport/api/downtime' -H 'Accept: application/vnd.monitos.v2+json' -H 'Referer: https://locmos41xsupport/' -H 'Origin: https://locmos41xsupport' -H 'X-Requested-With: XMLHttpRequest' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.108 Safari/537.36' -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' --data 'type=sv_host&end=1523049540&comment=TESTUSTESTUS&includeServices=true&includeChildren=false&id=003f'
+            curl 'https://locmos41xsupport/api/downtime'
+            data 
+            type=sv_host&
+            end=1523049540&
+            comment=TESTUSTESTUS&
+            includeServices=true&
+            includeChildren=false&
+            id=003f
         """
         if conf.debug_mode:
             self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime host is: ' + host)
@@ -533,9 +561,10 @@ class Monitos4Server( GenericServer ):
 
             if service == '':
                 form_data['type'] = 'sv_host'
-                form_data['host_effects'] = 'hostAndServices'
+                form_data['includeServices'] = 'true'
+                form_data['includeChildren'] = 'false'
                 # form_data['host_effects'] = 'hostOnly'
-                form_data['host'] = self.hosts[host].svid
+                form_data['id'] = self.hosts[host].svid
                 # form_data['svid'] = self.hosts[host].svid
             else:
                 form_data['type'] = 'sv_service_status'
@@ -558,13 +587,13 @@ class Monitos4Server( GenericServer ):
             form_data['schedule_now'] = 'false'
 
             if conf.debug_mode:
-                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime, form_data are: ' + repr( form_data ) )
-                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime url: ' + '{0}/rest/private/nagios/downtime'.format(self.monitor_url) + repr(data=form_data))
+                # self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime, form_data are: ' + repr( form_data ) )
+                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime url: ' + '{0}/api/downtime'.format(self.monitor_url) + repr(form_data))
 
             # TODO: 2018_03_27, test endpoint
-            # https://locmos41xsupport/rest/private/nagios/downtime
-            self.session.put(
-                '{0}/rest/private/nagios/downtime'.format(self.monitor_url), data=form_data)
+            # https://locmos41xsupport/api/downtime / POST
+            self.session.post('{0}/api/downtime'.format(self.monitor_url), data=form_data)
+            # self.session.put('{0}/api/downtime'.format(self.monitor_url), data=form_data)
 
         except:
             import traceback

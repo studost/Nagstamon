@@ -3,22 +3,27 @@
 
 ## My builds
 
+* 2017_11_14 Nagstamon-3.1-20171114-mos?
 * 2018_03_27 Nagstamon-3.1-20180327-monitos
+* 2018_03_29 Nagstamon-3.1-20180329-monitos
 
 
 ### env C:\projects\github\studost\Nagstamon\build
+
+* It works!!!
+* with Python3.6
+
 
 ```
 python build.py
 ```
 
-Installer
+Resulting Installer
 C:\projects\github\studost\Nagstamon\build\dist\Nagstamon-3.1-20180327-monitos-win64_setup.exe
 
 
 
-### Logfile
-
+### Nagstamon Logfile
 
 C:\Users\ustachowiak\nagstamon.log
 
@@ -60,6 +65,7 @@ InnoSetup >= 5.5 – http://www.jrsoftware.org/isdl.php
 PyInstaller lastest development version which is known to work with Python 3.6 is needed so this one has to be pulled py pip:
 
 * C:\python36\scripts\pip install https://github.com/pyinstaller/pyinstaller/archive/4f3ea16ad788d17b4bb150f9c2c224ab2b82afde.zip
+
 
 #### Test
 
