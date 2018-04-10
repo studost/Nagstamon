@@ -202,8 +202,12 @@ class Monitos4Server( GenericServer ):
                 h = dict(host)
 
                 # Skip if Host is 'Pending'
-                if type(h['sv_host__nagios_status__current_state']) is int and int(h['sv_host__nagios_status__current_state']) == 4:
-                    continue
+                # 2018_04_10
+                try:
+                    if type(h['sv_host__nagios_status__current_state']) is int and int(h['sv_host__nagios_status__current_state']) == 4:
+                        continue
+                except:
+                    pass
 
                 # host
                 host_name = h['sv_host__nagios__host_name']
@@ -214,12 +218,17 @@ class Monitos4Server( GenericServer ):
                     self.new_hosts[host_name].name = host_name
                     self.new_hosts[host_name].svid = h['sv_host__svobjects____SVID']
                     self.new_hosts[host_name].server = self.name
-                    self.new_hosts[host_name].status = self.STATES_MAPPING['hosts'][int(
-                        h['sv_host__nagios_status__current_state'])]
-                    self.new_hosts[host_name].last_check = datetime.datetime.fromtimestamp(
-                        int(h['sv_host__nagios_status__last_check']))
+                    try:
+                        self.new_hosts[host_name].status = self.STATES_MAPPING['hosts'][int(h['sv_host__nagios_status__current_state'])]
+                    except:
+                        pass
+                    try:
+                        self.new_hosts[host_name].last_check = datetime.datetime.fromtimestamp( int(h['sv_host__nagios_status__last_check']))
+                    except:
+                        pass
                     self.new_hosts[host_name].attempt = h['sv_host__nagios__max_check_attempts']
                     self.new_hosts[host_name].status_information = h['sv_host__nagios_status__plugin_output']
+                    
                     if type(h['sv_host__nagios_status__checks_enabled']) is int:
                         self.new_hosts[host_name].passiveonly = not (int(h['sv_host__nagios_status__checks_enabled']))
                     if type(h['sv_host__nagios_status__is_flapping']) is int:
@@ -230,24 +239,28 @@ class Monitos4Server( GenericServer ):
                         if int(h['sv_host__nagios_status__problem_has_been_acknowledged']) != 0:
                             self.new_hosts[host_name].acknowledged = True
                     # 2017_11_06
-                    if type(h['sv_host__nagios_status__scheduled_downtime_depth']) is int and int(h['sv_host__nagios_status__scheduled_downtime_depth']) != 0:
-                        self.new_hosts[host_name].scheduled_downtime = True
-                    
+                    try:
+                        if int(h['sv_host__nagios_status__scheduled_downtime_depth']) != 0:
+                            self.new_hosts[host_name].scheduled_downtime = True
+                    except:
+                        self.new_hosts[host_name].scheduled_downtime = False
+                        
                     # 2017_11_06 Skip if Host has notifications disabled
-                    if type(h['sv_host__nagios_status__notifications_enabled']) is int:
+                    try:
                         if int(h['sv_host__nagios_status__notifications_enabled']) == 0:
                             self.new_hosts[host_name].notifications_disabled = True
+                    except:
+                        self.new_hosts[host_name].notifications_disabled = False
 
-                    if type( h['sv_host__nagios_status__state_type']) is int:
-                        self.new_hosts[host_name].status_type = 'soft' if int(
-                            h['sv_host__nagios_status__state_type']) == 0 else 'hard'
+                    try:
+                        self.new_hosts[host_name].status_type = 'soft' if int(h['sv_host__nagios_status__state_type']) == 0 else 'hard'
+                    except:
+                        self.new_hosts[host_name].status_type = 'hard'
 
                     # extra duration needed for calculation
-                    duration = datetime.datetime.now(
-                    ) - datetime.datetime.fromtimestamp(int(h['sv_host__nagios_status__last_state_change']))
+                    duration = datetime.datetime.now() - datetime.datetime.fromtimestamp(int(h['sv_host__nagios_status__last_state_change']))
 
-                    self.new_hosts[host_name].duration = strfdelta(
-                        duration, '{days}d {hours}h {minutes}m {seconds}s')
+                    self.new_hosts[host_name].duration = strfdelta( duration, '{days}d {hours}h {minutes}m {seconds}s')
 
                 del h, host_name
         except:
@@ -542,15 +555,19 @@ class Monitos4Server( GenericServer ):
             :param minutes: NOT SUPPORTED - Integer - Flexible Downtime
 
 
-            curl 'https://locmos41xsupport/api/downtime' -H 'Accept: application/vnd.monitos.v2+json' -H 'Referer: https://locmos41xsupport/' -H 'Origin: https://locmos41xsupport' -H 'X-Requested-With: XMLHttpRequest' -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.108 Safari/537.36' -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' --data 'type=sv_host&end=1523049540&comment=TESTUSTESTUS&includeServices=true&includeChildren=false&id=003f'
             curl 'https://locmos41xsupport/api/downtime'
-            data 
             type=sv_host&
             end=1523049540&
             comment=TESTUSTESTUS&
             includeServices=true&
             includeChildren=false&
             id=003f
+
+            SVC:
+            type=sv_service_status
+            end=1523347560
+            comment=TESTUSTESTUS
+            id=0046004d
         """
         if conf.debug_mode:
             self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime host is: ' + host)
@@ -568,8 +585,8 @@ class Monitos4Server( GenericServer ):
                 # form_data['svid'] = self.hosts[host].svid
             else:
                 form_data['type'] = 'sv_service_status'
-                form_data['service'] = self.hosts[host].services[service].svid
-                # form_data['svid'] = self.hosts[host].services[service].svid
+                # 2018_04_10
+                form_data['id'] = self.hosts[host].services[service].svid
 
             # Format start_time and end_time from user-friendly format to timestamp
             start_time = time.mktime(datetime.datetime.strptime(
@@ -587,7 +604,6 @@ class Monitos4Server( GenericServer ):
             form_data['schedule_now'] = 'false'
 
             if conf.debug_mode:
-                # self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime, form_data are: ' + repr( form_data ) )
                 self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_downtime url: ' + '{0}/api/downtime'.format(self.monitor_url) + repr(form_data))
 
             # TODO: 2018_03_27, test endpoint
