@@ -23,7 +23,7 @@
 # Changelog:
 # studo, 2018_03_27, adopted initial implementation for Monitos4
 #
-# TODOs:
+# TODO:
 # a lot i'm sure
 # 
 from Nagstamon.Objects import Result
