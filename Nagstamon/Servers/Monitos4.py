@@ -161,6 +161,10 @@ class Monitos4Server( GenericServer ):
             form_data['limit_start'] = 0
             # Get all hosts
             form_data['limit_length'] = 99999
+            # 2018_11_18, studo, fetch only hostproblems
+            form_data['filter[0][data][type]'] = 'list'
+            form_data['filter[0][data][value]'] = '1,2,4'
+            form_data['filter[0][field]'] = 'sv_host__nagios_status__current_state'
             #if self.use_autologin == True:
             #    form_data['authtoken'] = self.autologin_key
 
@@ -193,8 +197,6 @@ class Monitos4Server( GenericServer ):
                               status_code=status_code)
 
             self.check_for_error(jsonraw, error, status_code)
-            if conf.debug_mode:
-                self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 hosts are: ' + jsonraw)
 
             hosts = json.loads(jsonraw)
 
@@ -211,6 +213,9 @@ class Monitos4Server( GenericServer ):
 
                 # host
                 host_name = h['sv_host__nagios__host_name']
+                #2018_11_18: debugging
+                if conf.debug_mode:
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' host_name is: ' + host_name)
 
                 # If a host does not exist, create its object
                 if host_name not in self.new_hosts:
@@ -275,6 +280,12 @@ class Monitos4Server( GenericServer ):
         # services
         # 2018_03_27
         # https://locmos41xsupport/rest/private/nagios/service_status/browser
+        #filter[0][data][type]   list
+        #filter[0][data][value]  0,1,2,4
+        #filter[0][field]    sv_host__nagios_status__current_state
+        #filter[1][data][type]   list
+        #filter[1][data][value]  1,2,3,4
+        #filter[1][field]    sv_service_status__nagios_status__current_state
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
@@ -285,6 +296,13 @@ class Monitos4Server( GenericServer ):
             form_data['limit_start'] = 0
             # Get all services
             form_data['limit_length'] = 99999
+            # 2018_11_18, studo, fetch only serviceproblems
+            form_data['filter[0][data][type]'] = 'list'
+            form_data['filter[0][data][value]'] = '1,2,4'
+            form_data['filter[0][field]'] = 'sv_host__nagios_status__current_state'
+            form_data['filter[1][data][type]'] = 'list'
+            form_data['filter[1][data][value]'] = '1,2,3,4'
+            form_data['filter[1][field]'] = 'sv_service_status__nagios_status__current_state'
             #if self.use_autologin == True:
             #    form_data['authtoken'] = self.autologin_key
 
@@ -319,6 +337,10 @@ class Monitos4Server( GenericServer ):
                 service_name = s['sv_service_status__nagios__service_description']
                 # service_name = s['sv_service_status__svobjects__rendered_label']
                 display_name = s['sv_service_status__nagios__service_description']
+
+                #2018_11_18: debugging
+                if conf.debug_mode:
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' Service host_name is: ' + host_name + 'Service: ' + service_name)
 
                 # If a service does not exist, create its object
                 if service_name not in self.new_hosts[host_name].services:

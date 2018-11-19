@@ -1358,8 +1358,9 @@ class GenericServer(object):
         try:
             try:
                 # debug
-                if conf.debug_mode is True:
-                    self.Debug(server=self.get_name(), debug='FetchURL: ' + url + ' CGI Data: ' + str(cgi_data))
+                # TODO: 2018_11_19, disabled because call returns credentials
+                #if conf.debug_mode is True:
+                #    self.Debug(server=self.get_name(), debug='FetchURL: ' + url + ' CGI Data: ' + str(cgi_data))
 
                 # use session only for connections to monitor servers, other requests like looking for updates
                 # should go out without credentials
