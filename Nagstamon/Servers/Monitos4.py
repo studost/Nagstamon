@@ -151,7 +151,7 @@ class Monitos4Server( GenericServer ):
         if conf.debug_mode == True:
             self.Debug(server=self.get_name(), debug='monitos4 Authtoken is: ' + self.autologin_key)
 
-        # hosts
+        # hostlist
         try:
             form_data = dict()
             form_data['acknowledged'] = 1
@@ -162,9 +162,9 @@ class Monitos4Server( GenericServer ):
             # Get all hosts
             form_data['limit_length'] = 99999
             # 2018_11_18, studo, fetch only hostproblems
-            form_data['filter[0][data][type]'] = 'list'
-            form_data['filter[0][data][value]'] = '1,2,4'
-            form_data['filter[0][field]'] = 'sv_host__nagios_status__current_state'
+            #form_data['filter[0][data][type]'] = 'list'
+            #form_data['filter[0][data][value]'] = '1,2,4'
+            #form_data['filter[0][field]'] = 'sv_host__nagios_status__current_state'
             #if self.use_autologin == True:
             #    form_data['authtoken'] = self.autologin_key
 
@@ -211,11 +211,12 @@ class Monitos4Server( GenericServer ):
                 except:
                     pass
 
-                # host
+                # hostlist
                 host_name = h['sv_host__nagios__host_name']
+                current_host_state = h['sv_host__nagios_status__current_state']
                 #2018_11_18: debugging
                 if conf.debug_mode:
-                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' host_name is: ' + host_name)
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' host ' + host_name + ' has current_state ' + str(current_host_state))
 
                 # If a host does not exist, create its object
                 if host_name not in self.new_hosts:
@@ -277,7 +278,7 @@ class Monitos4Server( GenericServer ):
             result, error = self.Error(sys.exc_info())
             return Result(result=result, error=error)
 
-        # services
+        # servicelist
         # 2018_03_27
         # https://locmos41xsupport/rest/private/nagios/service_status/browser
         #filter[0][data][type]   list
@@ -298,7 +299,7 @@ class Monitos4Server( GenericServer ):
             form_data['limit_length'] = 99999
             # 2018_11_18, studo, fetch only serviceproblems
             form_data['filter[0][data][type]'] = 'list'
-            form_data['filter[0][data][value]'] = '1,2,4'
+            form_data['filter[0][data][value]'] = '0,1,2,4'
             form_data['filter[0][field]'] = 'sv_host__nagios_status__current_state'
             form_data['filter[1][data][type]'] = 'list'
             form_data['filter[1][data][value]'] = '1,2,3,4'
@@ -337,10 +338,11 @@ class Monitos4Server( GenericServer ):
                 service_name = s['sv_service_status__nagios__service_description']
                 # service_name = s['sv_service_status__svobjects__rendered_label']
                 display_name = s['sv_service_status__nagios__service_description']
+                current_service_state = s['sv_service_status__nagios_status__current_state']
 
                 #2018_11_18: debugging
                 if conf.debug_mode:
-                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' Service host_name is: ' + host_name + 'Service: ' + service_name)
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' Service ' + host_name + '!' + service_name + ' has current_state: ' + str(current_service_state) )
 
                 # If a service does not exist, create its object
                 if service_name not in self.new_hosts[host_name].services:
@@ -413,27 +415,25 @@ class Monitos4Server( GenericServer ):
             :param host: String - Host name
             :param service: String - Service name
         """
-        # log.info('info_dict is: %s', info_dict )
-        form_data = dict()
-        form_data['commandName'] = 'check-now'
 
-        # TODO: 2018_03_27, test endpoint
-        # https://locmos41xsupport/rest/private/nagios/command/execute
+        # TODO: 208_11_22, monitos 4.3, new endpoint
+        # https://locmosrel421/api/host/uuid/reschedule
+        
         try:
+            type = 'host'
             if service == '':
+                svid = self.hosts[host].svid
                 if conf.debug_mode:
-                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, host is: ' + self.hosts[host].svid)
-                form_data['params'] = json.dumps({'__SVID': self.hosts[host].svid})
-                form_data['commandType'] = 'sv_host'
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, host is: ' + svid)
             else:
+                type = 'serviceinstance'
+                svid = self.hosts[host].services[service].svid
                 if conf.debug_mode:
-                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, service is: ' + self.hosts[host].services[service].svid)
-                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, services are: ' + repr( self.hosts[host].services ) )
-                form_data['params'] = json.dumps({'__SVID': self.hosts[host].services[service].svid})
-                form_data['commandType'] = 'sv_service_status'
+                    self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_recheck, service is: ' + svid)
 
             self.session.post(
-                '{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
+                '{0}/api/{1}/{2}/reschedule'.format(self.monitor_url, type , '$' + str(svid)))
+                #'{0}/rest/private/nagios/command/execute'.format(self.monitor_url), data=form_data)
 
         except:
             import traceback
