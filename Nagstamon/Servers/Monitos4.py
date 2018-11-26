@@ -408,6 +408,8 @@ class Monitos4Server( GenericServer ):
         # dummy return in case all is OK
         return Result()
 
+    # 2018_11_26
+    # External commands
     def _set_recheck(self, host, service):
         """
             Do a POST-Request to recheck the given host or service in monitos4
@@ -416,7 +418,7 @@ class Monitos4Server( GenericServer ):
             :param service: String - Service name
         """
 
-        # TODO: 208_11_22, monitos 4.3, new endpoint
+        # TODO: 2018_11_22, monitos 4.3, new endpoint
         # https://locmosrel421/api/host/uuid/reschedule
         
         try:
@@ -455,7 +457,15 @@ class Monitos4Server( GenericServer ):
             :param all_services: Array - List of all services (filled only if 'Acknowledge all services on host' is set)
         """
 
-        # 2017_11_07
+        # 2018_11_26
+        #POST /api/host/$01dE/acknowledge
+        #POST /api/serviceinstance/$01dE003l/acknowledge
+        #comment (mandatory): string
+        #sticky (optional): bool
+        #notify (optional): bool
+        #expiry (optional): int / timestamp
+        #persistent (optional): bool
+        #includeServices (optional, bei host): bool
         if conf.debug_mode:
             self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' monitos4 _set_acknowledge host is: ' + host)
             if service != '':  # service
@@ -504,6 +514,16 @@ class Monitos4Server( GenericServer ):
             :param check_output: String - Check output
             :param performance_data: String - Performance data
         """
+        #2018_11_26
+        #POST /api/host/$01dE/checkresult
+        #POST /api/serviceinstance/$01dE003l/checkresult
+        #checkresult:
+
+        #plugin_output (mandatory): string
+        #exit_status (mandatory): int
+        #performance_data (optional): string
+        #check_source (optional): string
+
         if conf.debug_mode:
             self.Debug(server=self.get_name(), debug=time.strftime('%a %H:%M:%S') + ' mos3 _set_submit_check_result, host is: ' + host)
             if service != '':  # service
